@@ -7,43 +7,61 @@ import { Mail, Lock, ArrowRight, User } from "lucide-react";
 import HeroSection from "@/components/auth/HeroSection";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-
-interface LoginPageProps {}
-
-type LoginFormData = {
-  email: string;
-  password: string;
-  rememberMe: boolean;
-};
+import { apiService } from "@/services/apiService";
+import { handleLogin } from "@/lib/actions";
+import {
+  useToast,
+  handleBackendError,
+} from "@/components/providers/ToastProvider";
 
 type LoginFormErrors = {
   email?: string;
   password?: string;
+  general?: string;
 };
 
-const LoginPage: React.FC<LoginPageProps> = () => {
-  const [formData, setFormData] = useState<LoginFormData>({
-    email: "",
-    password: "",
-    rememberMe: false,
-  });
-
+const LoginPage: React.FC = () => {
+  const [email, setEmail] = useState(""); // 👈 added state
+  const [password, setPassword] = useState(""); // 👈 added state
   const [errors, setErrors] = useState<LoginFormErrors>({});
   const [loading, setLoading] = useState(false);
   const router = useRouter();
+  const toast = useToast();
 
   const resetPassword = () => {
     router.push("/auth/forgot-password");
   };
-
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setLoading(true);
+    setErrors({});
 
-    setTimeout(() => {
+    const payload = {
+      email,
+      password,
+      rememberMe: (e.currentTarget.rememberMe as HTMLInputElement).checked,
+    };
+
+    try {
+      const response = await apiService.postWithoutToken(
+        "api/auth/login/",
+        payload
+      );
+
+      if (response.access) {
+        await handleLogin(response.user.id, response.access, response.refresh);
+        toast.success("Logged in successfully!");
+        router.push("/dashboard");
+      } else {
+        // backend responded without access (validation errors etc.)
+        handleBackendError(response, toast);
+        setErrors(response);
+      }
+    } catch (error: any) {
+      handleBackendError(error, toast);
+    } finally {
       setLoading(false);
-      console.log("Login attempt:", formData);
-    }, 2000);
+    }
   };
 
   return (
@@ -56,28 +74,27 @@ const LoginPage: React.FC<LoginPageProps> = () => {
 
       <div className="w-full lg:w-1/2 flex items-center justify-center p-8">
         <div className="w-full max-w-md">
-          {/* Form */}
           <form onSubmit={handleSubmit} className="space-y-6">
             <InputField
+              field="input"
               icon={Mail}
               type="email"
+              name="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
               placeholder="Email address"
-              value={formData.email}
-              onChange={(e) =>
-                setFormData({ ...formData, email: e.target.value })
-              }
               error={errors.email}
               required
             />
 
             <InputField
+              field="input"
               icon={Lock}
               type="password"
+              name="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
               placeholder="Password"
-              value={formData.password}
-              onChange={(e) =>
-                setFormData({ ...formData, password: e.target.value })
-              }
               error={errors.password}
               required
             />
@@ -86,10 +103,7 @@ const LoginPage: React.FC<LoginPageProps> = () => {
               <label className="flex items-center">
                 <input
                   type="checkbox"
-                  checked={formData.rememberMe}
-                  onChange={(e) =>
-                    setFormData({ ...formData, rememberMe: e.target.checked })
-                  }
+                  name="rememberMe"
                   className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
                 />
                 <span className="ml-2 text-sm text-gray-600">Remember me</span>
@@ -104,6 +118,10 @@ const LoginPage: React.FC<LoginPageProps> = () => {
               </button>
             </div>
 
+            {errors.general && (
+              <p className="text-red-500 text-sm">{errors.general}</p>
+            )}
+
             <Button
               type="submit"
               loading={loading}
@@ -113,15 +131,16 @@ const LoginPage: React.FC<LoginPageProps> = () => {
               Sign In
             </Button>
           </form>
+
           <div className="mt-8 text-center">
             <p className="text-gray-600">
-              Don't have an account yet?{" "}
-              <button
-                // onClick={backToLogin}
+              Don’t have an account yet?{" "}
+              <Link
+                href="/auth/signup"
                 className="text-blue-600 hover:text-blue-700 font-semibold hover:underline"
               >
-                <Link href="/auth/login">Sign Up</Link>
-              </button>
+                Sign Up
+              </Link>
             </p>
           </div>
         </div>

@@ -3,19 +3,12 @@
 import { useState } from "react";
 import { User, Mail, Lock, ArrowRight, Shield } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { InputField } from "@/components/input/InputField";
 import HeroSection from "@/components/auth/HeroSection";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-
-type FormData = {
-  firstName: string;
-  lastName: string;
-  email: string;
-  password: string;
-  confirmPassword: string;
-  agreeToTerms: boolean;
-};
+import { apiService } from "@/services/apiService";
+import { handleLogin } from "@/lib/actions";
+import { InputField } from "@/components/input/InputField";
 
 type FormErrors = {
   firstName?: string;
@@ -23,27 +16,15 @@ type FormErrors = {
   email?: string;
   password?: string;
   confirmPassword?: string;
+  general?: string;
 };
 
 type SignupPageProps = {};
 
 const SignupPage: React.FC<SignupPageProps> = () => {
-  const [formData, setFormData] = useState<FormData>({
-    firstName: "",
-    lastName: "",
-    email: "",
-    password: "",
-    confirmPassword: "",
-    agreeToTerms: false,
-  });
-
   const [errors, setErrors] = useState<FormErrors>({});
   const [loading, setLoading] = useState(false);
-  //   const router = useRouter();
-
-  //   const backToLogin = () => {
-  //     router.push("/auth/login");
-  //   };
+  const router = useRouter();
 
   const passwordStrength = (password: string) => {
     let strength = 0;
@@ -54,24 +35,54 @@ const SignupPage: React.FC<SignupPageProps> = () => {
     return strength;
   };
 
-  const strength = passwordStrength(formData.password);
-
-  const strengthColors = [
-    "bg-red-500",
-    "bg-orange-500",
-    "bg-yellow-500",
-    "bg-green-500",
-  ] as const;
-
-  const strengthTexts = ["Weak", "Fair", "Good", "Strong"] as const;
-
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setLoading(true);
+    setErrors({});
 
-    setTimeout(() => {
+    const formData = new FormData(e.currentTarget);
+
+    const payload = {
+      // firstName: formData.get("firstName") as string,
+      // lastName: formData.get("lastName") as string,
+      email: formData.get("email") as string,
+      password1: formData.get("password1") as string,
+      password2: formData.get("password2") as string,
+      agreeToTerms: formData.get("agreeToTerms") === "on",
+    };
+
+    if (payload.password1 !== payload.password2) {
+      setErrors({ confirmPassword: "Passwords don't match" });
       setLoading(false);
-    }, 2000);
+      return;
+    }
+
+    if (!payload.agreeToTerms) {
+      setErrors({ general: "You must agree to the terms to continue." });
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const response = await apiService.post("api/auth/signup/", payload);
+
+      if (response.access) {
+        // Redirect after successful signup
+        handleLogin(response.user.id, response.access, response.refresh);
+
+        router.push("/dashbaord");
+      } else {
+        const tmpErrors: Record<string, string> = {};
+        Object.entries(response).forEach(([key, value]) => {
+          tmpErrors[key] = String(value);
+        });
+        setErrors(tmpErrors);
+      }
+    } catch (err: any) {
+      setErrors({ general: "Something went wrong. Try again." });
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -92,97 +103,48 @@ const SignupPage: React.FC<SignupPageProps> = () => {
           {/* Form */}
           <form onSubmit={handleSubmit} className="space-y-6">
             {/* First & last name */}
-            <div className="grid grid-cols-2 gap-4">
+            {/* <div className="grid grid-cols-2 gap-4">
               <InputField
                 icon={User}
+                name="firstName"
                 placeholder="First name"
-                value={formData.firstName}
-                onChange={(e) =>
-                  setFormData({ ...formData, firstName: e.target.value })
-                }
                 required
               />
               <InputField
                 icon={User}
+                name="lastName"
                 placeholder="Last name"
-                value={formData.lastName}
-                onChange={(e) =>
-                  setFormData({ ...formData, lastName: e.target.value })
-                }
                 required
               />
-            </div>
+            </div> */}
 
             {/* Email */}
             <InputField
+              field="input"
               icon={Mail}
               type="email"
+              name="email"
               placeholder="Email address"
-              value={formData.email}
-              onChange={(e) =>
-                setFormData({ ...formData, email: e.target.value })
-              }
               required
             />
 
             {/* Password */}
-            <div>
-              <InputField
-                icon={Lock}
-                type="password"
-                placeholder="Password"
-                value={formData.password}
-                onChange={(e) =>
-                  setFormData({ ...formData, password: e.target.value })
-                }
-                required
-              />
-
-              {formData.password && (
-                <div className="mt-2">
-                  <div className="flex space-x-1 mb-2">
-                    {[0, 1, 2, 3].map((i) => (
-                      <div
-                        key={i}
-                        className={`h-2 w-full rounded ${
-                          i < strength
-                            ? strengthColors[strength - 1]
-                            : "bg-gray-200"
-                        }`}
-                      />
-                    ))}
-                  </div>
-                  <p
-                    className={`text-sm ${
-                      strength > 0
-                        ? `text-${
-                            strengthColors[strength - 1].split("-")[1]
-                          }-600`
-                        : "text-gray-500"
-                    }`}
-                  >
-                    Password strength:{" "}
-                    {strength > 0 ? strengthTexts[strength - 1] : "Too weak"}
-                  </p>
-                </div>
-              )}
-            </div>
+            <InputField
+              field="input"
+              icon={Lock}
+              type="password"
+              name="password1"
+              placeholder="Password"
+              required
+            />
 
             {/* Confirm password */}
             <InputField
               icon={Lock}
               type="password"
+              name="password2"
               placeholder="Confirm password"
-              value={formData.confirmPassword}
-              onChange={(e) =>
-                setFormData({ ...formData, confirmPassword: e.target.value })
-              }
-              error={
-                formData.confirmPassword &&
-                formData.password !== formData.confirmPassword
-                  ? "Passwords don't match"
-                  : ""
-              }
+              error={errors.confirmPassword}
               required
             />
 
@@ -190,10 +152,7 @@ const SignupPage: React.FC<SignupPageProps> = () => {
             <div className="flex items-start">
               <input
                 type="checkbox"
-                checked={formData.agreeToTerms}
-                onChange={(e) =>
-                  setFormData({ ...formData, agreeToTerms: e.target.checked })
-                }
+                name="agreeToTerms"
                 className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 mt-1"
                 required
               />
@@ -209,13 +168,16 @@ const SignupPage: React.FC<SignupPageProps> = () => {
               </span>
             </div>
 
+            {errors.general && (
+              <p className="text-red-500 text-sm">{errors.general}</p>
+            )}
+
             {/* Submit button */}
             <Button
               type="submit"
               loading={loading}
               icon={<ArrowRight />}
               className="w-full"
-              disabled={!formData.agreeToTerms}
             >
               Create Account
             </Button>
@@ -225,12 +187,12 @@ const SignupPage: React.FC<SignupPageProps> = () => {
           <div className="mt-8 text-center">
             <p className="text-gray-600">
               Already have an account?{" "}
-              <button
-                // onClick={backToLogin}
+              <Link
+                href="/auth/login"
                 className="text-blue-600 hover:text-blue-700 font-semibold hover:underline"
               >
-                <Link href="/auth/login">Sign in</Link>
-              </button>
+                Sign in
+              </Link>
             </p>
           </div>
         </div>

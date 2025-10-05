@@ -1,113 +1,60 @@
+// context/AuthContext.tsx
 "use client";
 
+import { apiService } from "@/services/apiService";
 import React, {
   createContext,
   useContext,
-  useState,
   useEffect,
+  useState,
   ReactNode,
 } from "react";
 
-interface User {
+type User = {
   id: string;
   email: string;
-  firstName: string;
-  lastName: string;
-  avatar?: string;
-}
+  fullname: string;
+};
 
-interface AuthContextType {
-  isAuthenticated: boolean;
+type AuthContextType = {
   user: User | null;
   loading: boolean;
-  login: (email: string, password: string) => Promise<void>;
-  logout: () => void;
-  updateUser: (user: Partial<User>) => void;
-}
+  setUser: React.Dispatch<React.SetStateAction<User | null>>;
+};
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-export const AuthProvider: React.FC<{ children: ReactNode }> = ({
-  children,
-}) => {
+export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    // Check for existing token and validate
-    const token = localStorage.getItem("authToken");
-    if (token) {
-      validateToken(token);
-    } else {
-      setLoading(false);
-    }
-  }, []);
-
-  const validateToken = async (token: string) => {
+  const fetchUser = async () => {
     try {
-      const response = await fetch("/api/auth/validate", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      if (response.ok) {
-        const userData = await response.json();
-        setUser(userData);
-      } else {
-        localStorage.removeItem("authToken");
-      }
+      const response = await apiService.get("api/auth/user/");
+      setUser(response);
     } catch (error) {
-      console.error("Token validation failed:", error);
-      localStorage.removeItem("authToken");
+      console.error("Failed to fetch user:", error);
+      setUser(null);
     } finally {
       setLoading(false);
     }
   };
 
-  const login = async (email: string, password: string) => {
-    const response = await fetch("/api/auth/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password }),
-    });
-
-    if (response.ok) {
-      const { token, user } = await response.json();
-      localStorage.setItem("authToken", token);
-      setUser(user);
-    } else {
-      throw new Error("Login failed");
-    }
-  };
-
-  const logout = () => {
-    localStorage.removeItem("authToken");
-    setUser(null);
-  };
-
-  const updateUser = (userData: Partial<User>) => {
-    setUser((prev) => (prev ? { ...prev, ...userData } : null));
-  };
+  useEffect(() => {
+    fetchUser();
+  }, []);
 
   return (
-    <AuthContext.Provider
-      value={{
-        isAuthenticated: !!user,
-        user,
-        loading,
-        login,
-        logout,
-        updateUser,
-      }}
-    >
+    <AuthContext.Provider value={{ user, loading, setUser }}>
       {children}
     </AuthContext.Provider>
   );
-};
+}
 
-export const useAuth = () => {
+export function useAuth() {
   const context = useContext(AuthContext);
   if (!context) {
-    throw new Error("useAuth must be used within AuthProvider");
+    throw new Error("useAuth must be used within an AuthProvider");
   }
   return context;
-};
+}
